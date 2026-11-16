@@ -1,0 +1,10 @@
+1. Le step EBK est-il multi-thread (taskExecutor, throttleLimit,
+   partitioning, AsyncItemProcessor) ? Le reader est-il partagé
+   entre threads ?
+2. Dans EbkXmlReader et MultiXmlSplitterInputStream : comment sont
+   traitées les IOException et les erreurs du flux S3 ? Y a-t-il un
+   catch qui renvoie -1 ou continue au lieu de propager ?
+3. Timeouts configurés sur le client S3 (apiCallTimeout,
+   readTimeout, connectionMaxIdleTime) ?
+4. Qu'est-ce qui déclenche le job ? Plusieurs pods peuvent-ils le
+   lancer ou réécrire l'objet S3 en même temps ?
