@@ -1,0 +1,9 @@
+1. Quel client S3 est construit (S3AsyncClient.builder(), crtBuilder(),
+   multipartEnabled) ? Version du SDK et de aws-crt ?
+2. Montrer le code complet de MultiXmlSplitterInputStream : y a-t-il
+   un buffer interne non borné ?
+3. Dans EbkReconcileWithRetryTasklet : à chaque retry, le stream S3,
+   le reader et le step précédents sont-ils fermés ? Combien de
+   retries max dans la même JVM ?
+4. Config mémoire de l'environnement où l'OOM se produit (pas le
+   run config local).
