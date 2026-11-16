@@ -1,0 +1,66 @@
+Contexte : batch Java qui lit un fichier XML d'environ 1 Go (jusqu'à
+150 000 opérations d'environ 40 lignes) depuis un bucket S3 et le traite
+en StAX opération par opération. Il plante en "Java heap space".
+Objectif : trouver tout endroit où la mémoire croît avec la taille du
+fichier. Pour chaque point, donner fichier + ligne, l'extrait de code,
+et un verdict (OK / suspect / coupable) avec le correctif proposé.
+
+1. Lecture S3
+- Chercher getObjectAsBytes, ResponseBytes, asByteArray, readAllBytes,
+  IOUtils.toByteArray, IOUtils.toString, Files.readAllBytes,
+  ByteArrayInputStream, ou copie du fichier en String.
+- Vérifier que l'InputStream S3 est passé directement au parser StAX
+  (éventuellement via BufferedInputStream), et bien fermé.
+
+2. Parsing StAX
+- XMLStreamReader ou XMLEventReader ? Des événements sont-ils stockés
+  dans une collection ?
+- Si JAXB : JAXBContext.newInstance doit être créé une seule fois, pas
+  par opération. L'unmarshal doit cibler l'élément "opération", pas un
+  parent qui englobe tout le fichier.
+- Chercher toute conversion DOM (DocumentBuilder, Transformer,
+  DOMResult, XPath) sur un noeud parent.
+- Chercher un StringBuilder / StringWriter qui accumule le XML.
+
+3. Accumulation en mémoire
+- Toute List, Map, Set ou champ d'instance / static alimenté dans la
+  boucle de lecture sans être vidé (y compris listes d'erreurs, de
+  rejets, de résultats, compteurs par clé, caches, dédoublonnage).
+- Chercher collect(...), toList(), addAll, saveAll appelés une fois à
+  la fin sur l'ensemble des opérations.
+- Vérifier que le traitement est fait par lots de taille bornée.
+
+4. Persistance (JPA / Hibernate / JDBC)
+- Portée de @Transactional : une seule transaction pour tout le
+  fichier ?
+- Présence de entityManager.flush() + clear() à intervalle régulier.
+- Config hibernate.jdbc.batch_size, cache de second niveau, cache de
+  requêtes.
+- En JDBC pur : addBatch sans executeBatch régulier, ResultSet ou
+  Statement non fermés.
+
+5. Spring Batch (si utilisé)
+- Taille de chunk / commit-interval.
+- Reader custom qui charge tout dans open() ou read().
+- Listeners ou ExecutionContext qui stockent les items.
+
+6. Sorties
+- ByteArrayOutputStream, StringWriter ou fichier de sortie construit
+  en mémoire avant envoi (S3, MQ, HTTP, rapport).
+- Upload S3 : RequestBody.fromBytes / fromString au lieu d'un stream
+  ou d'un multipart upload.
+
+7. Logs et divers
+- Log du contenu complet d'une opération ou du fichier, appender en
+  mémoire, MDC qui grossit.
+- Executor / CompletableFuture / file d'attente non bornée alimentée
+  plus vite qu'elle n'est consommée.
+- Ressources non fermées (absence de try-with-resources).
+
+8. Configuration d'exécution
+- Valeur réelle de -Xmx / MaxRAMPercentage et limite mémoire du
+  conteneur (Dockerfile, script de lancement, manifest Kubernetes).
+- Présence de -XX:+HeapDumpOnOutOfMemoryError et HeapDumpPath.
+
+Livrable : tableau récapitulatif des constats classés par probabilité
+d'être la cause, puis le correctif recommandé pour le plus probable.
